@@ -15,23 +15,42 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: neon-city-game
+      - name: Verify public page download
+        run: |
+          mkdir -p neon-city/verification
+          python3 - <<'PY'
+          import urllib.request, hashlib, json
+          from pathlib import Path
+          url='https://rawcdn.githack.com/ro-ro-b/e2e-test-ivb-ttp/3a16ec9e30afe8de737dc267aaf48dec7ee0f562/neon-city/index.html'
+          report={'url':url}
+          try:
+              req=urllib.request.Request(url,headers={'User-Agent':'NeonCity-Test/1.0'})
+              with urllib.request.urlopen(req,timeout=40) as r:
+                  data=r.read();report.update(status=r.status,mime=r.headers.get('Content-Type'),bytes=len(data),sha256=hashlib.sha256(data).hexdigest())
+              report['passed']=report['status']==200 and report['sha256']=='001db22e807891e80a607f8a8ff623cda7784c93288481c7b1920eadcec61288'
+          except Exception as e: report.update(passed=False,error=str(e))
+          Path('neon-city/verification/download.json').write_text(json.dumps(report,indent=2))
+          print(json.dumps(report))
+          PY
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
       - name: Install browser testing tools
         run: |
-          python3 -m pip install playwright==1.56.0
-          python3 -m playwright install --with-deps chromium
+          python -m venv .venv
+          .venv/bin/python -m pip install playwright==1.56.0 2>&1 | tee neon-city/verification/install.txt
+          .venv/bin/python -m playwright install --with-deps chromium 2>&1 | tee -a neon-city/verification/install.txt
       - name: Check hosted game
-        run: python3 neon-city/check_live.py
+        run: .venv/bin/python neon-city/check_live.py
       - name: Save verification report
         if: always()
         run: |
-          if [ -f neon-city/verification/report.json ]; then
-            git config user.name 'Neon City Verification'
-            git config user.email 'neon-city-verification@users.noreply.github.com'
-            git add neon-city/verification/report.json
-            if ! git diff --cached --quiet; then
-              git commit -m 'Record hosted game browser verification'
-              git push origin HEAD:neon-city-game
-            fi
+          git config user.name 'Neon City Verification'
+          git config user.email 'neon-city-verification@users.noreply.github.com'
+          git add neon-city/verification/*.json neon-city/verification/*.txt 2>/dev/null || true
+          if ! git diff --cached --quiet; then
+            git commit -m 'Record hosted game verification'
+            git push origin HEAD:neon-city-game
           fi
       - uses: actions/upload-artifact@v4
         if: always()
