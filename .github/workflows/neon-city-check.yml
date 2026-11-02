@@ -1,0 +1,40 @@
+name: Verify hosted Neon City game
+on:
+  push:
+    branches: [neon-city-game]
+    paths:
+      - 'neon-city/check_live.py'
+      - '.github/workflows/neon-city-check.yml'
+permissions:
+  contents: write
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: neon-city-game
+      - name: Install browser testing tools
+        run: |
+          python3 -m pip install playwright==1.56.0
+          python3 -m playwright install --with-deps chromium
+      - name: Check hosted game
+        run: python3 neon-city/check_live.py
+      - name: Save verification report
+        if: always()
+        run: |
+          if [ -f neon-city/verification/report.json ]; then
+            git config user.name 'Neon City Verification'
+            git config user.email 'neon-city-verification@users.noreply.github.com'
+            git add neon-city/verification/report.json
+            if ! git diff --cached --quiet; then
+              git commit -m 'Record hosted game browser verification'
+              git push origin HEAD:neon-city-game
+            fi
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: neon-city-hosted-verification
+          path: neon-city/verification/
